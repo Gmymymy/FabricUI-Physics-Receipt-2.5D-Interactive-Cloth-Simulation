@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>布料质感物理小票 - v6.0 深度光影版</title>
+    <style>
+        :root {
+            --bg-color: #0d0d0f;
+            --paper-color: #fdfaf0;
+            --ink-color: #1a1a1a;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        #canvas {
+            cursor: grab;
+            filter: url(#fabric-shading) drop-shadow(0 40px 80px rgba(0,0,0,0.8));
+        }
+
+        #canvas:active {
+            cursor: grabbing;
+        }
+
+        .hint {
+            position: absolute;
+            bottom: 40px;
+            color: rgba(255,255,255,0.12);
+            font-size: 0.75rem;
+            pointer-events: none;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        #receipt-template {
+            position: absolute;
+            left: -9999px;
+            width: 340px;
+            padding: 60px 40px;
+            background: var(--paper-color);
+            color: var(--ink-color);
+            box-sizing: border-box;
+            background-image: 
+                url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+        }
+
+        .serrated-edge {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 16px;
+            background-color: var(--paper-color);
+            clip-path: polygon(0% 0%, 2% 100%, 4% 0%, 6% 100%, 8% 0%, 10% 100%, 12% 0%, 14% 100%, 16% 0%, 18% 100%, 20% 0%, 22% 100%, 24% 0%, 26% 100%, 28% 0%, 30% 100%, 32% 0%, 34% 100%, 36% 0%, 38% 100%, 40% 0%, 42% 100%, 44% 0%, 46% 100%, 48% 0%, 50% 100%, 52% 0%, 54% 100%, 56% 0%, 58% 100%, 60% 0%, 62% 100%, 64% 0%, 66% 100%, 68% 0%, 70% 100%, 72% 0%, 74% 100%, 76% 0%, 78% 100%, 80% 0%, 82% 100%, 84% 0%, 86% 100%, 88% 0%, 90% 100%, 92% 0%, 94% 100%, 96% 0%, 98% 100%, 100% 0%, 100% 100%, 0% 100%);
+        }
+
+        .serrated-top { top: -15px; transform: rotate(180deg); }
+        .serrated-bottom { bottom: -15px; }
+    </style>
+</head>
+<body>
+
+    <div class="hint">Real-time Shadow & Light Interaction</div>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="receipt-template">
+        <div class="serrated-edge serrated-top"></div>
+        <div style="text-align: center; border-bottom: 3px solid #1a1a1a; margin-bottom: 30px; padding-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 28px; letter-spacing: 5px; font-weight: 900;">FABRIC UI</h2>
+            <small style="opacity: 0.6; letter-spacing: 2px;">2.5D SHADER v6.0</small>
+        </div>
+        
+        <div style="font-size: 16px; font-weight: 500;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span>Normal Mapping</span><span>$350.00</span></div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span>Ambient Occlusion</span><span>$220.00</span></div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span>Stress Gradient</span><span>$120.00</span></div>
+            
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 5px solid #000; font-weight: 900; font-size: 24px; display: flex; justify-content: space-between;">
+                <span>TOTAL</span><span>$690.00</span>
+            </div>
+        </div>
+
+        <div style="margin-top: 60px; height: 50px; background: repeating-linear-gradient(90deg, #111 0, #111 4px, transparent 4px, transparent 10px); opacity: 0.9;">
+        </div>
+
+        <div style="margin-top: 40px; text-align: center; font-size: 12px; color: #666;">
+            <p style="margin: 6px 0; letter-spacing: 1px; font-weight: bold;">GAO MINGYANG LABS</p>
+            <p style="margin: 4px 0; opacity: 0.7;">FABRIC_SIMULATION_STABLE</p>
+        </div>
+        <div class="serrated-edge serrated-bottom"></div>
+    </div>
+
+    <svg style="position: absolute; width: 0; height: 0;">
+        <filter id="fabric-shading">
+            <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="2" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+    </svg>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+        const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        
+        const ROWS = 16, COLS = 12, SPACING = 25, ITERATIONS = 30;
+        const FRICTION = 0.86; 
+        const RECOVERY = 0.14;
+        
+        let points = [], links = [], mouse = {x:0, y:0, down:false, target:null}, img = null;
+
+        class Point {
+            constructor(x, y, u, v) {
+                this.x = this.px = this.homeX = x; 
+                this.y = this.py = this.homeY = y; 
+                this.u = u; 
+                this.v = v;
+                this.pinned = false;
+            }
+            update() {
+                if (this.pinned) return;
+                let vx = (this.x - this.px) * FRICTION;
+                let vy = (this.y - this.py) * FRICTION;
+                this.px = this.x; this.py = this.y;
+                this.x += vx; this.y += vy;
+
+                if (!mouse.down || mouse.target !== this) {
+                    this.x += (this.homeX - this.x) * RECOVERY;
+                    this.y += (this.homeY - this.y) * RECOVERY;
+                }
+            }
+        }
+
+        async function init() {
+            const template = document.getElementById('receipt-template');
+            img = await html2canvas(template, { backgroundColor: null, scale: 2 });
+            
+            resize();
+            const startX = (canvas.width / dpr - COLS * SPACING) / 2;
+            const startY = 80;
+
+            for(let r=0; r<=ROWS; r++) {
+                for(let c=0; c<=COLS; c++) {
+                    let p = new Point(startX + c*SPACING, startY + r*SPACING, c/COLS, r/ROWS);
+                    if(r === 0) p.pinned = true;
+                    points.push(p);
+                }
+            }
+
+            for(let r=0; r<=ROWS; r++) {
+                for(let c=0; c<=COLS; c++) {
+                    if(c<COLS) links.push({p1:points[r*(COLS+1)+c], p2:points[r*(COLS+1)+c+1], d:SPACING});
+                    if(r<ROWS) links.push({p1:points[r*(COLS+1)+c], p2:points[(r+1)*(COLS+1)+c], d:SPACING});
+                }
+            }
+            render();
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            ctx.scale(dpr, dpr);
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width/dpr, canvas.height/dpr);
+            
+            if(mouse.down) {
+                if(!mouse.target) {
+                    let dmin = 60;
+                    points.forEach(p => {
+                        let d = Math.hypot(p.x - mouse.x, p.y - mouse.y);
+                        if(d < dmin && !p.pinned) { dmin = d; mouse.target = p; }
+                    });
+                }
+                if(mouse.target) {
+                    mouse.target.x = mouse.target.px = mouse.x;
+                    mouse.target.y = mouse.target.py = mouse.y;
+                }
+            }
+
+            points.forEach(p => p.update());
+            for(let i=0; i<ITERATIONS; i++) {
+                links.forEach(l => {
+                    let dx = l.p2.x - l.p1.x, dy = l.p2.y - l.p1.y, dist = Math.hypot(dx, dy);
+                    let diff = (l.d - dist) / (dist || 1) * 0.6;
+                    if(!l.p1.pinned) { l.p1.x -= dx * diff; l.p1.y -= dy * diff; }
+                    if(!l.p2.pinned) { l.p2.x += dx * diff; l.p2.y += dy * diff; }
+                });
+            }
+
+            const w = img.width, h = img.height;
+            
+            for(let r=0; r<ROWS; r++) {
+                for(let c=0; c<COLS; c++) {
+                    let idx = r*(COLS+1)+c;
+                    let p1 = points[idx], p2 = points[idx+1], p3 = points[idx+COLS+1], p4 = points[idx+COLS+2];
+                    
+                    drawTWithDepth(p1, p2, p3, w, h);
+                    drawTWithDepth(p2, p4, p3, w, h);
+                }
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        function drawTWithDepth(p1, p2, p3, w, h) {
+            const x1=p1.x, y1=p1.y, x2=p2.x, y2=p2.y, x3=p3.x, y3=p3.y;
+            const u1=p1.u*w, v1=p1.v*h, u2=p2.u*w, v2=p2.v*h, u3=p3.u*w, v3=p3.v*h;
+            
+            const det = (u1*(v2-v3)-v1*(u2-u3)+(u2*v3-v2*u3));
+            if(Math.abs(det) > 0.000001) {
+                ctx.save(); 
+                ctx.beginPath(); 
+                ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.closePath(); 
+                ctx.clip();
+
+                ctx.transform(
+                    (x1*(v2-v3)-v1*(x2-x3)+(x2*v3-v2*x3))/det, 
+                    (y1*(v2-v3)-v1*(y2-y3)+(y2*v3-v2*y3))/det, 
+                    (u1*(x2-x3)-x1*(u2-u3)+(u2*x3-x2*u3))/det, 
+                    (u1*(y2-y3)-y1*(u2-u3)+(u2*y3-y2*u3))/det, 
+                    (u1*(v2*x3-v3*x2)-v1*(u2*x3-u3*x2)+(u2*v3-v2*u3)*x1)/det, 
+                    (u1*(v2*y3-v3*y2)-v1*(u2*y3-u3*y2)+(u2*v3-v2*u3)*y1)/det
+                );
+                ctx.drawImage(img, 0, 0);
+
+                const currentArea = Math.abs((x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2)) / 2);
+                const initialArea = (SPACING * SPACING) / 2;
+                const compression = currentArea / initialArea;
+                
+                const dx = (p1.x - p1.homeX + p2.x - p2.homeX + p3.x - p3.homeX) / 3;
+                const dy = (p1.y - p1.homeY + p2.y - p2.homeY + p3.y - p3.homeY) / 3;
+                
+                if (compression < 0.98) {
+                    const shade = Math.min((1 - compression) * 1.5, 0.5);
+                    const grad = ctx.createLinearGradient(x1, y1, x3, y3);
+                    grad.addColorStop(0, `rgba(0,0,0,${shade})`);
+                    grad.addColorStop(1, 'rgba(0,0,0,0)');
+                    
+                    ctx.globalCompositeOperation = 'multiply';
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, 0, w, h);
+                } 
+                else if (compression > 1.02) {
+                    const highlight = Math.min((compression - 1) * 0.4, 0.2);
+                    ctx.globalCompositeOperation = 'screen';
+                    ctx.fillStyle = `rgba(255,255,255,${highlight})`;
+                    ctx.fillRect(0, 0, w, h);
+                }
+
+                const movement = Math.hypot(dx, dy);
+                if (movement > 2) {
+                    ctx.globalCompositeOperation = 'multiply';
+                    ctx.fillStyle = `rgba(0,0,0,${Math.min(movement * 0.015, 0.15)})`;
+                    ctx.fillRect(0, 0, w, h);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        window.onmousedown = e => { mouse.down = true; mouse.x = e.clientX; mouse.y = e.clientY; mouse.target = null; };
+        window.onmousemove = e => { mouse.x = e.clientX; mouse.y = e.clientY; };
+        window.onmouseup = () => { mouse.down = false; mouse.target = null; };
+        window.onresize = resize;
+
+        init();
+    </script>
+</body>
+</html>
